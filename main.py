@@ -150,7 +150,7 @@ def post_livros(livro: Livro, db: Session = Depends(sessao_db), credentials: HTT
     db.commit()
     db.refresh(novo_livro) # Aqui eu atualizo o objeto novo_livro com as informações do banco de dados, como o id gerado automaticamente pelo banco de dados.
 
-    return {"message": "Livro adicionado com sucesso!", "id": novo_livro.id}
+    return {"message": "Livro adicionado com sucesso!"}
 
 @app.put("/atualiza/{id_livro}")
 def put_livros(id_livro: int, livro: Livro, db: Session = Depends(sessao_db), credentials: HTTPBasicCredentials = Depends(autenticar_usuario)):
