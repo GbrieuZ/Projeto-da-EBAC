@@ -52,8 +52,6 @@ MIHA_SENHA = "admin"
 
 security = HTTPBasic()
 
-meus_livrozinhos = {}
-
 class LivroDB(Base):
     __tablename__ = "livros"
     id = Column(Integer, primary_key=True, index=True) # primary_key=True é para dizer que essa coluna é a chave primária do banco de dados, ou seja, o identificador único de cada registro
@@ -185,3 +183,8 @@ def delet_livro(id_livro: int, db: Session = Depends(sessao_db), credentials: HT
 
 # http://127.0.0.1:8000/livros?page=1&limit=100
 # aqui eu escolho a página e a quantidade de livros que eu quero ver por página
+
+# ORM - Object Relational Mapping - é uma técnica de programação que permite que os desenvolvedores trabalhem com bancos de dados relacionais usando objetos em vez de escrever consultas SQL diretamente.
+# FastAPI / Django / Flask / Node / Express / Nest.js / Laravel / Spring Boot -> Frameworks Backends todos possuem suporte a ORM.
+# Vantagens -> A gente vai ganhar agilidade no desenvolvimento
+# Desvantagens -> A gente pode perder performance no Banco de Dados
