@@ -22,9 +22,10 @@ from pydantic import BaseModel
 from typing import Optional
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 import secrets
+
 from sqlalchemy import create_engine, Column, Integer, String
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import Session, sessionmaker
 
 DATABASE_URL = "sqlite:///./livros.db" # Aqui é a url do banco de dados
 
@@ -53,7 +54,7 @@ security = HTTPBasic()
 
 meus_livrozinhos = {}
 
-class Livro(Base):
+class LivroDB(Base):
     __tablename__ = "livros"
     id = Column(Integer, primary_key=True, index=True) # primary_key=True é para dizer que essa coluna é a chave primária do banco de dados, ou seja, o identificador único de cada registro
     nome_livro = Column(String, index=True)
@@ -66,7 +67,6 @@ class Livro(BaseModel):
     ano_livro: int
 
 Base.metadata.create_all(bind=engine) # Aqui eu crio as tabelas do banco de dados, ou seja, a tabela livros com as colunas id, nome_livro, autor_livro e ano_livro
-
 
 def sessao_db():
     db = SessionLocal()
@@ -86,69 +86,100 @@ def autenticar_usuario(credentials: HTTPBasicCredentials = Depends(security)):
             headers={"WWW-Authenticate": "Basic"}
         )
 
-
 @app.get("/livros")
-def get_livros(page: int = 1, limit: int = 10,credentials: HTTPBasicCredentials = Depends(autenticar_usuario)):
+def get_livros(page: int = 1, limit: int = 10, db: Session = Depends(sessao_db), credentials: HTTPBasicCredentials = Depends(autenticar_usuario)):
+    # esse db é a conexão com o banco de dados.
     if page < 1 or limit < 1:
         raise HTTPException(status_code=400, detail="Page ou limit estão com valores inválidos")
-    if not meus_livrozinhos:
+    
+    livros = db.query(LivroDB).offset((page - 1) * limit).limit(limit).all()
+    """
+    db.query(LivroDB)
+        → Busca todos os registros da tabela/modelo LivroDB.
+
+    .offset((page - 1) * limit)
+        → Pula uma quantidade de registros com base na página atual.
+        Exemplo:
+
+        page = 1 → offset = 0 (não pula nada)
+        page = 2 → offset = limit (pula os primeiros registros)
+
+        .limit(limit)
+            → Limita a quantidade de resultados retornados (ex: 10 por página).
+
+        .all()
+            → Executa a consulta e retorna os resultados em lista.
+    """
+
+    if not livros:
         return {"message": "Nenhum livro cadastrado"}
     
-    start = (page-1) * limit
-    end = start + limit
 
-    livros_paginados = [
-        {"id": id_livro, "nome_livro": livro_data ["nome_livro"], "autor_livro": livro_data["autor_livro"], "ano_livro": livro_data["ano_livro"]}
-        for id_livro, livro_data in list(meus_livrozinhos.items())[start:end]
+    #livros_paginados = [
+        #{"id": id_livro, "nome_livro": livro_data ["nome_livro"], "autor_livro": livro_data["autor_livro"], "ano_livro": livro_data["ano_livro"]}
+        #for id_livro, livro_data in list(meus_livrozinhos.items())[start:end]
         #for loop dentro dos meus_livrozinhos, onde eu estruturo as info dentro de uma lista (transformo em lista)
         #Dando for loop para pegar o id_livro e livro_data usando a paginação estruturada pelo start e end
         #Ao mesmo tempo eu crio um dicionário com as informações que eu quero retornar
-    ]
+    #]
     
+    total_livros = db.query(LivroDB).count() # Aqui eu conto a quantidade total de livros cadastrados no banco de dados
+    # Esse codigo é para contar a quantidade total de livros cadastrados no banco de dados, para que eu possa retornar essa informação na resposta da minha API, 
+    # e também para que eu possa usar essa informação para calcular a quantidade total de páginas disponíveis, caso eu queira implementar uma funcionalidade de paginação mais avançada no futuro.
+
     return{
         "page": page,
         "limit": limit,
-        "total_livros": len(meus_livrozinhos),
-        "livros": livros_paginados
+        "total_livros": total_livros,
+        "livros": [{"id": livro.id, "nome_livro": livro.nome_livro, "autor_livro": livro.autor_livro, "ano_livro": livro.ano_livro} for livro in livros]
     }
-# Essa função mostratrá os livros cadastrados na minha API de forma paginada como no retorno acima
+    # Aqui eu retorno um dicionário com as informações da página, limite, total de livros 
+    # e a lista de livros paginados (com as informações estruturadas em um dicionário para cada livro)
+   
+@app.post("/adiciona")
+def post_livros(livro: Livro, db: Session = Depends(sessao_db), credentials: HTTPBasicCredentials = Depends(autenticar_usuario)):
+    # esse db é a conexão com o banco de dados.
+    db_livro = db.query(LivroDB).filter(LivroDB.nome_livro == livro.nome_livro, LivroDB.autor_livro == livro.autor_livro, LivroDB.ano_livro == livro.ano_livro).first()
+    # Aqui eu verifico se já existe um livro com as mesmas informações (nome, autor e ano) no banco de dados, para evitar duplicidade de registros.
+
+    if db_livro:
+        raise HTTPException(status_code=400, detail="Livro já cadastrado")
+    
+    novo_livro = LivroDB(nome_livro = livro.nome_livro, autor_livro = livro.autor_livro, ano_livro = livro.ano_livro)
+    db.add(novo_livro)
+    db.commit()
+    db.refresh(novo_livro) # Aqui eu atualizo o objeto novo_livro com as informações do banco de dados, como o id gerado automaticamente pelo banco de dados.
+
+    return {"message": "Livro adicionado com sucesso!", "id": novo_livro.id}
+
+@app.put("/atualiza/{id_livro}")
+def put_livros(id_livro: int, livro: Livro, db: Session = Depends(sessao_db), credentials: HTTPBasicCredentials = Depends(autenticar_usuario)):
+    # esse db é a conexão com o banco de dados.
+    db_livro = db.query(LivroDB).filter(LivroDB.id == id_livro).first()
+    # coenxão especificamente com uma tabela do banco de dados, no caso a tabela livros, e eu filtro essa tabela para encontrar o livro com o id fornecido na URL da requisição, e depois eu pego o primeiro resultado encontrado (que deve ser o único resultado, já que o id é único).
+    # Aqui eu verifico se existe um livro com o id fornecido no banco de dados, para que eu possa atualizar as informações desse livro.
+    
+    if not db_livro:
+        raise HTTPException(status_code=404, detail="Livro não encontrado")
+    
+    db_livro.nome_livro = livro.nome_livro
+    db_livro.autor_livro = livro.autor_livro
+    db_livro.ano_livro = livro.ano_livro
+    db.commit()
+    db.refresh(db_livro)
+
+    # Aqui eu atualizo as informações do livro encontrado no banco de dados com as novas informações fornecidas no corpo da requisição, e depois eu salvo as alterações no banco de dados com o commit().
+
+@app.delete("/deletar/{id_livro}")
+def delet_livro(id_livro: int, db: Session = Depends(sessao_db), credentials: HTTPBasicCredentials = Depends(autenticar_usuario)):
+    db_livro = db.query(LivroDB).filter(LivroDB.id == id_livro).first()
+    if not db_livro:
+        raise HTTPException(status_code=404, detail="Livro não encontrado")
+    
+    db.delete(db_livro)
+    db.commit()
+
+    return {"message": "Livro deletado com sucesso!"}
 
 # http://127.0.0.1:8000/livros?page=1&limit=100
 # aqui eu escolho a página e a quantidade de livros que eu quero ver por página
-
-    
-# id do livro
-# nome do livro
-# autor do livro
-# ano de publicação
-
-@app.post("/adiciona")
-def post_livros(id_livro: int, livro: Livro, credentials: HTTPBasicCredentials = Depends(autenticar_usuario)):
-    if id_livro in meus_livrozinhos:
-        raise HTTPException(status_code=400, detail="Livro já cadastrado")
-    else:
-        meus_livrozinhos[id_livro] = livro.dict()
-        return {"message": "Livro adicionado com sucesso!"}
-    
-
-@app.put("/atualiza/{id_livro}")
-def put_livros(id_livro: int, livro: Livro, credentials: HTTPBasicCredentials = Depends(autenticar_usuario)):
-    meu_livro = meus_livrozinhos.get(id_livro)
-    if not meu_livro:
-        raise HTTPException(status_code=404, detail="Livro não encontrado")
-    else:
-        # Eu jogo essa informação dentro do meu antigo dicionário (que é o meus_livrozinhos)
-        # E NÃOooooo dentro da REFERENCIA do antigo dicionário
-        # Antigo dicionário != Referencia do antigo dicionário
-        meus_livrozinhos[id_livro] = livro.dict() 
-        
-        
-        return {"message": "Livro atualizado com sucesso!"}
-    
-@app.delete("/deletar/{id_livro}")
-def delet_livro(id_livro: int, credentials: HTTPBasicCredentials = Depends(autenticar_usuario)):
-    if id_livro not in meus_livrozinhos:
-        raise HTTPException(status_code=404, detail="Livro não encontrado")
-    else:
-        del meus_livrozinhos[id_livro]
-        return {"message": "Livro deletado com sucesso!"}
