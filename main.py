@@ -168,6 +168,8 @@ def put_livros(id_livro: int, livro: Livro, db: Session = Depends(sessao_db), cr
     db.commit()
     db.refresh(db_livro)
 
+    return {"message": "Livro atualizado com sucesso!"}
+
     # Aqui eu atualizo as informações do livro encontrado no banco de dados com as novas informações fornecidas no corpo da requisição, e depois eu salvo as alterações no banco de dados com o commit().
 
 @app.delete("/deletar/{id_livro}")
