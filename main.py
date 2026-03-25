@@ -48,7 +48,7 @@ app = FastAPI(
 )
 
 MEU_USUARIO = "admin" 
-MIHA_SENHA = "admin"
+MINHA_SENHA = "admin"
 
 security = HTTPBasic()
 
@@ -75,7 +75,7 @@ def sessao_db():
         
 def autenticar_usuario(credentials: HTTPBasicCredentials = Depends(security)):
     is_username_correct = secrets.compare_digest(credentials.username, MEU_USUARIO)
-    is_password_correct = secrets.compare_digest(credentials.password, MIHA_SENHA)
+    is_password_correct = secrets.compare_digest(credentials.password, MINHA_SENHA)
 
     if not (is_username_correct and is_password_correct):
         raise HTTPException(
@@ -134,7 +134,7 @@ def get_livros(page: int = 1, limit: int = 10, db: Session = Depends(sessao_db),
     # Aqui eu retorno um dicionário com as informações da página, limite, total de livros 
     # e a lista de livros paginados (com as informações estruturadas em um dicionário para cada livro)
    
-@app.post("/adiciona")
+@app.post("/livros")
 def post_livros(livro: Livro, db: Session = Depends(sessao_db), credentials: HTTPBasicCredentials = Depends(autenticar_usuario)):
     # esse db é a conexão com o banco de dados.
     db_livro = db.query(LivroDB).filter(LivroDB.nome_livro == livro.nome_livro, LivroDB.autor_livro == livro.autor_livro, LivroDB.ano_livro == livro.ano_livro).first()
@@ -148,9 +148,9 @@ def post_livros(livro: Livro, db: Session = Depends(sessao_db), credentials: HTT
     db.commit()
     db.refresh(novo_livro) # Aqui eu atualizo o objeto novo_livro com as informações do banco de dados, como o id gerado automaticamente pelo banco de dados.
 
-    return {"message": "Livro adicionado com sucesso!"}
+    return {"message": f"Livro {novo_livro.nome_livro} adicionado com sucesso!"}
 
-@app.put("/atualiza/{id_livro}")
+@app.put("/livros/{id_livro}")
 def put_livros(id_livro: int, livro: Livro, db: Session = Depends(sessao_db), credentials: HTTPBasicCredentials = Depends(autenticar_usuario)):
     # esse db é a conexão com o banco de dados.
     db_livro = db.query(LivroDB).filter(LivroDB.id == id_livro).first()
@@ -170,8 +170,8 @@ def put_livros(id_livro: int, livro: Livro, db: Session = Depends(sessao_db), cr
 
     # Aqui eu atualizo as informações do livro encontrado no banco de dados com as novas informações fornecidas no corpo da requisição, e depois eu salvo as alterações no banco de dados com o commit().
 
-@app.delete("/deletar/{id_livro}")
-def delet_livro(id_livro: int, db: Session = Depends(sessao_db), credentials: HTTPBasicCredentials = Depends(autenticar_usuario)):
+@app.delete("/livros/{id_livro}")
+def delete_livro(id_livro: int, db: Session = Depends(sessao_db), credentials: HTTPBasicCredentials = Depends(autenticar_usuario)):
     db_livro = db.query(LivroDB).filter(LivroDB.id == id_livro).first()
     if not db_livro:
         raise HTTPException(status_code=404, detail="Livro não encontrado")
@@ -179,7 +179,7 @@ def delet_livro(id_livro: int, db: Session = Depends(sessao_db), credentials: HT
     db.delete(db_livro)
     db.commit()
 
-    return {"message": "Livro deletado com sucesso!"}
+    return {"message": f"Livro {db_livro.nome_livro} deletado com sucesso!"}
 
 # http://127.0.0.1:8000/livros?page=1&limit=100
 # aqui eu escolho a página e a quantidade de livros que eu quero ver por página
