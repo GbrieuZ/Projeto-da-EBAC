@@ -22,20 +22,40 @@ from pydantic import BaseModel
 from typing import Optional
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 import secrets
+import os
 
 from sqlalchemy import create_engine, Column, Integer, String
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import Session, sessionmaker
 
-DATABASE_URL = "sqlite:///./livros.db" # Aqui é a url do banco de dados
+"""
+| Biblioteca       | Pra que serve              |
+| ---------------- | -------------------------- |
+| FastAPI          | Criar a API                |
+| FastAPI Security | Autenticação               |
+| Pydantic         | Validação de dados         |
+| typing           | Tipagem (Python padrão)    |
+| secrets          | Segurança (tokens, senhas) |
+| os               | Sistema operacional        |
+| SQLAlchemy       | Banco de dados (ORM)       |
+
+"""
+
+DATABASE_URL = os.getenv("DATABASE_URL") # Aqui é a url do banco de dados
 
 engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
+# Cria a conexão com o banco de dados usando a URL informada.
+# O "check_same_thread=False" permite que o SQLite seja usado em múltiplas threads (necessário em APIs como FastAPI).
+
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+# Cria uma fábrica de sessões (Session) para interagir com o banco.
+# autocommit=False: você controla quando salvar (commit).
+# autoflush=False: evita enviar alterações automaticamente antes de consultas.
+# bind=engine: conecta essa sessão ao banco criado acima.
+
 Base = declarative_base()
-
-# Esse codigo é para usar localmente o banco de dados
-# Para uso normal, precisaria de um user, senha, host, porta e nome do banco de dados.
-
+# Base usada para criar os modelos (tabelas) do banco de dados com ORM.
+# Todas as classes de modelo irão herdar dessa Base.
 
 app = FastAPI(
     title="API de Livros",
@@ -47,9 +67,9 @@ app = FastAPI(
     }
 )
 
-MEU_USUARIO = "admin" 
-MINHA_SENHA = "admin"
-
+# Variáveis de ambiente, ficam no arquivo .env
+MEU_USUARIO = os.getenv("MEU_USUARIO")
+MINHA_SENHA = os.getenv("MINHA_SENHA")
 security = HTTPBasic()
 
 class LivroDB(Base):
@@ -111,17 +131,9 @@ def get_livros(page: int = 1, limit: int = 10, db: Session = Depends(sessao_db),
 
     if not livros:
         return {"message": "Nenhum livro cadastrado"}
-    
 
-    #livros_paginados = [
-        #{"id": id_livro, "nome_livro": livro_data ["nome_livro"], "autor_livro": livro_data["autor_livro"], "ano_livro": livro_data["ano_livro"]}
-        #for id_livro, livro_data in list(meus_livrozinhos.items())[start:end]
-        #for loop dentro dos meus_livrozinhos, onde eu estruturo as info dentro de uma lista (transformo em lista)
-        #Dando for loop para pegar o id_livro e livro_data usando a paginação estruturada pelo start e end
-        #Ao mesmo tempo eu crio um dicionário com as informações que eu quero retornar
-    #]
     
-    total_livros = db.query(LivroDB).count() # Aqui eu conto a quantidade total de livros cadastrados no banco de dados
+    total_livros = db.query(LivroDB).count()
     # Esse codigo é para contar a quantidade total de livros cadastrados no banco de dados, para que eu possa retornar essa informação na resposta da minha API, 
     # e também para que eu possa usar essa informação para calcular a quantidade total de páginas disponíveis, caso eu queira implementar uma funcionalidade de paginação mais avançada no futuro.
 
