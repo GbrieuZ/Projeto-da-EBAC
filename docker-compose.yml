@@ -1,5 +1,6 @@
 # Gerenciador de containers Docker Compose
 
+version: '3.8'
 services:
     app:
         build: .
