@@ -1,3 +1,4 @@
+# Imagem docker
 # Aqui é onde vamos "guardar" o nosso backend.
 # Nessa "caixinha" para ser executada em qualquer lugar
 
@@ -25,4 +26,8 @@ CMD ["poetry", "run", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "800
 # Para rodar o projeto, basta usar o comando:
 # podman machine start
 # podman-compose build
-# podman-compose up --build
+# podman-compose up --build ate aq pra executar dps de buildar
+
+# podman build -t projeto-ebac . 
+# aqui vai passar por todos os passos para ver se esta correto
+# para executar - podman run --env-file .env -d -p 8000:8000 projeto-ebac
