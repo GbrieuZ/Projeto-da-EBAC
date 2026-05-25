@@ -31,3 +31,13 @@ CMD ["poetry", "run", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "800
 # podman build -t projeto-ebac . 
 # aqui vai passar por todos os passos para ver se esta correto
 # para executar - podman run --env-file .env -d -p 8000:8000 projeto-ebac
+
+#SEGURANÇA
+
+# Use imagens oficiais e verificadas
+# Use imagenns pequenas e minimalistas
+# Atualize regularmente as imagens
+# Não armazenar senhgas e credenciais dentro do container
+# Remova containers e imagens não utilizados
+# Desative privilegios desnecessários
+# Monitore os logs e o comportamento do container
