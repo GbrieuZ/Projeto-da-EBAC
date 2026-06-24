@@ -28,6 +28,8 @@ from sqlalchemy import create_engine, Column, Integer, String
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import Session, sessionmaker
 
+import asyncio
+
 """
 | Biblioteca       | Pra que serve              |
 | ---------------- | -------------------------- |
@@ -105,7 +107,7 @@ def autenticar_usuario(credentials: HTTPBasicCredentials = Depends(security)):
         )
 
 @app.get("/livros")
-def get_livros(page: int = 1, limit: int = 10, db: Session = Depends(sessao_db), credentials: HTTPBasicCredentials = Depends(autenticar_usuario)):
+async def get_livros(page: int = 1, limit: int = 10, db: Session = Depends(sessao_db), credentials: HTTPBasicCredentials = Depends(autenticar_usuario)):
     # esse db é a conexão com o banco de dados.
     if page < 1 or limit < 1:
         raise HTTPException(status_code=400, detail="Page ou limit estão com valores inválidos")
@@ -145,9 +147,36 @@ def get_livros(page: int = 1, limit: int = 10, db: Session = Depends(sessao_db),
     }
     # Aqui eu retorno um dicionário com as informações da página, limite, total de livros 
     # e a lista de livros paginados (com as informações estruturadas em um dicionário para cada livro)
-   
-@app.post("/livros")
-def post_livros(livro: Livro, db: Session = Depends(sessao_db), credentials: HTTPBasicCredentials = Depends(autenticar_usuario)):
+
+async def chamadas_externas_1():
+    await asyncio.sleep(2)
+    return "Resutado chamada externa 1"
+
+async def chamadas_externas_2():
+    await asyncio.sleep(2)
+    return "Resutado chamada externa 2"
+
+async def chamadas_externas_3():
+    await asyncio.sleep(2)
+    return "Resutado chamada externa 3"
+
+@app.get("/chamadas-externas")
+async def chamadas_externas():
+    tarefa1 = asyncio.create_task(chamadas_externas_1())
+    tarefa2 = asyncio.create_task(chamadas_externas_2())
+    tarefa3 = asyncio.create_task(chamadas_externas_3())
+
+    resultado1 = await tarefa1
+    resultado2 = await tarefa2
+    resultado3 = await tarefa3
+
+    return{
+        "mensagem": "Todas as chamadas nas API's foram concluidas com sucesso",
+        "resultado": [resultado1, resultado2, resultado3]
+    }
+
+@app.post("/adiciona")
+async def post_livros(livro: Livro, db: Session = Depends(sessao_db), credentials: HTTPBasicCredentials = Depends(autenticar_usuario)):
     # esse db é a conexão com o banco de dados.
     db_livro = db.query(LivroDB).filter(LivroDB.nome_livro == livro.nome_livro, LivroDB.autor_livro == livro.autor_livro, LivroDB.ano_livro == livro.ano_livro).first()
     # Aqui eu verifico se já existe um livro com as mesmas informações (nome, autor e ano) no banco de dados, para evitar duplicidade de registros.
@@ -162,8 +191,8 @@ def post_livros(livro: Livro, db: Session = Depends(sessao_db), credentials: HTT
 
     return {"message": f"Livro {novo_livro.nome_livro} adicionado com sucesso!"}
 
-@app.put("/livros/{id_livro}")
-def put_livros(id_livro: int, livro: Livro, db: Session = Depends(sessao_db), credentials: HTTPBasicCredentials = Depends(autenticar_usuario)):
+@app.put("/atualiza/{id_livro}")
+async def put_livros(id_livro: int, livro: Livro, db: Session = Depends(sessao_db), credentials: HTTPBasicCredentials = Depends(autenticar_usuario)):
     # esse db é a conexão com o banco de dados.
     db_livro = db.query(LivroDB).filter(LivroDB.id == id_livro).first()
     # coenxão especificamente com uma tabela do banco de dados, no caso a tabela livros, e eu filtro essa tabela para encontrar o livro com o id fornecido na URL da requisição, e depois eu pego o primeiro resultado encontrado (que deve ser o único resultado, já que o id é único).
@@ -182,8 +211,8 @@ def put_livros(id_livro: int, livro: Livro, db: Session = Depends(sessao_db), cr
 
     # Aqui eu atualizo as informações do livro encontrado no banco de dados com as novas informações fornecidas no corpo da requisição, e depois eu salvo as alterações no banco de dados com o commit().
 
-@app.delete("/livros/{id_livro}")
-def delete_livro(id_livro: int, db: Session = Depends(sessao_db), credentials: HTTPBasicCredentials = Depends(autenticar_usuario)):
+@app.delete("/deletar/{id_livro}")
+async def delete_livro(id_livro: int, db: Session = Depends(sessao_db), credentials: HTTPBasicCredentials = Depends(autenticar_usuario)):
     db_livro = db.query(LivroDB).filter(LivroDB.id == id_livro).first()
     if not db_livro:
         raise HTTPException(status_code=404, detail="Livro não encontrado")
