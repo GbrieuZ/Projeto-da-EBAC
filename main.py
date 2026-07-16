@@ -23,6 +23,8 @@ from typing import Optional
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 import secrets
 import os
+import redis
+import json
 
 from sqlalchemy import create_engine, Column, Integer, String
 from sqlalchemy.ext.declarative import declarative_base
@@ -44,6 +46,8 @@ import asyncio
 """
 
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./livros.db") # Aqui é a url do banco de dados
+
+redis_client = redis.Redis(host='localhost', port=6379, db=0, decode_responses=True) # Config para rodar de forma local
 
 engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
 # Cria a conexão com o banco de dados usando a URL informada.
@@ -88,6 +92,13 @@ class Livro(BaseModel):
 
 Base.metadata.create_all(bind=engine) # Aqui eu crio as tabelas do banco de dados, ou seja, a tabela livros com as colunas id, nome_livro, autor_livro e ano_livro
 
+def salvar_livros_redis(livro_id: int, livro: Livro):
+    redis_client.set(f"livro:{livro_id}", json.dumps(livro.dict()))
+
+def deletar_livro_redis(livro_id: int):
+    redis_client.delete(f"livro:{livro_id}")
+
+
 def sessao_db():
     db = SessionLocal()
     try:
@@ -105,6 +116,18 @@ def autenticar_usuario(credentials: HTTPBasicCredentials = Depends(security)):
             detail="Usuário ou senha incorretos",
             headers={"WWW-Authenticate": "Basic"}
         )
+
+
+@app.get("/debug/redis")
+def ver_livros_redis():
+    chaves = redis_client.keys("livros:*")
+    livros = []
+
+    for chave in chaves:
+        valor = redis_client.get(chave)
+        livros.append({"chave": chave, "valor": json.loads(valor)})
+
+        return livros
 
 @app.get("/livros")
 async def get_livros(page: int = 1, limit: int = 10, db: Session = Depends(sessao_db), credentials: HTTPBasicCredentials = Depends(autenticar_usuario)):
@@ -148,6 +171,7 @@ async def get_livros(page: int = 1, limit: int = 10, db: Session = Depends(sessa
     # Aqui eu retorno um dicionário com as informações da página, limite, total de livros 
     # e a lista de livros paginados (com as informações estruturadas em um dicionário para cada livro)
 
+
 async def chamadas_externas_1():
     await asyncio.sleep(2)
     return "Resutado chamada externa 1"
@@ -159,6 +183,7 @@ async def chamadas_externas_2():
 async def chamadas_externas_3():
     await asyncio.sleep(2)
     return "Resutado chamada externa 3"
+
 
 @app.get("/chamadas-externas")
 async def chamadas_externas():
@@ -175,6 +200,7 @@ async def chamadas_externas():
         "resultado": [resultado1, resultado2, resultado3]
     }
 
+    
 @app.post("/adiciona")
 async def post_livros(livro: Livro, db: Session = Depends(sessao_db), credentials: HTTPBasicCredentials = Depends(autenticar_usuario)):
     # esse db é a conexão com o banco de dados.
@@ -188,6 +214,8 @@ async def post_livros(livro: Livro, db: Session = Depends(sessao_db), credential
     db.add(novo_livro)
     db.commit()
     db.refresh(novo_livro) # Aqui eu atualizo o objeto novo_livro com as informações do banco de dados, como o id gerado automaticamente pelo banco de dados.
+
+    salvar_livros_redis(novo_livro.id, livro)
 
     return {"message": f"Livro {novo_livro.nome_livro} adicionado com sucesso!"}
 
@@ -219,6 +247,8 @@ async def delete_livro(id_livro: int, db: Session = Depends(sessao_db), credenti
     
     db.delete(db_livro)
     db.commit()
+
+    deletar_livro_redis(id_livro)
 
     return {"message": f"Livro {db_livro.nome_livro} deletado com sucesso!"}
 
