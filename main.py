@@ -148,6 +148,33 @@ async def get_livros(page: int = 1, limit: int = 10, db: Session = Depends(sessa
     # Aqui eu retorno um dicionário com as informações da página, limite, total de livros 
     # e a lista de livros paginados (com as informações estruturadas em um dicionário para cada livro)
 
+async def chamadas_externas_1():
+    await asyncio.sleep(2)
+    return "Resutado chamada externa 1"
+
+async def chamadas_externas_2():
+    await asyncio.sleep(2)
+    return "Resutado chamada externa 2"
+
+async def chamadas_externas_3():
+    await asyncio.sleep(2)
+    return "Resutado chamada externa 3"
+
+@app.get("/chamadas-externas")
+async def chamadas_externas():
+    tarefa1 = asyncio.create_task(chamadas_externas_1())
+    tarefa2 = asyncio.create_task(chamadas_externas_2())
+    tarefa3 = asyncio.create_task(chamadas_externas_3())
+
+    resultado1 = await tarefa1
+    resultado2 = await tarefa2
+    resultado3 = await tarefa3
+
+    return{
+        "mensagem": "Todas as chamadas nas API's foram concluidas com sucesso",
+        "resultado": [resultado1, resultado2, resultado3]
+    }
+
 @app.post("/adiciona")
 async def post_livros(livro: Livro, db: Session = Depends(sessao_db), credentials: HTTPBasicCredentials = Depends(autenticar_usuario)):
     # esse db é a conexão com o banco de dados.
