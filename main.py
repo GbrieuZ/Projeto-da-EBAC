@@ -47,7 +47,7 @@ import asyncio
 
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./livros.db") # Aqui é a url do banco de dados
 
-redis_client = redis.Redis(host='localhost', port=6379, db=0, decode_responses=True) # Config para rodar de forma local
+redis_client = redis.Redis(host='127.0.0.1', port=6379, db=0, decode_responses=True) # Config para rodar de forma local
 
 engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
 # Cria a conexão com o banco de dados usando a URL informada.
@@ -93,7 +93,7 @@ class Livro(BaseModel):
 Base.metadata.create_all(bind=engine) # Aqui eu crio as tabelas do banco de dados, ou seja, a tabela livros com as colunas id, nome_livro, autor_livro e ano_livro
 
 def salvar_livros_redis(livro_id: int, livro: Livro):
-    redis_client.set(f"livro:{livro_id}", json.dumps(livro.dict()))
+    redis_client.setex(f"livro:{livro_id}", 30, json.dumps(livro.model_dump()))
 
 def deletar_livro_redis(livro_id: int):
     redis_client.delete(f"livro:{livro_id}")
@@ -116,62 +116,64 @@ def autenticar_usuario(credentials: HTTPBasicCredentials = Depends(security)):
             detail="Usuário ou senha incorretos",
             headers={"WWW-Authenticate": "Basic"}
         )
-
+    
 
 @app.get("/debug/redis")
 def ver_livros_redis():
-    chaves = redis_client.keys("livros:*")
+    chaves = redis_client.scan_iter("livro:*")
     livros = []
 
     for chave in chaves:
         valor = redis_client.get(chave)
-        livros.append({"chave": chave, "valor": json.loads(valor)})
+        ttl = redis_client.ttl(chave)
 
-        return livros
+        livros.append({"chave": chave, "valor": json.loads(valor), "ttl": ttl})
+
+    return livros
 
 @app.get("/livros")
-async def get_livros(page: int = 1, limit: int = 10, db: Session = Depends(sessao_db), credentials: HTTPBasicCredentials = Depends(autenticar_usuario)):
-    # esse db é a conexão com o banco de dados.
+def get_livros(
+    page: int = 1,
+    limit: int = 10,
+    db: Session = Depends(sessao_db),
+    credentials: HTTPBasicCredentials = Depends(autenticar_usuario)
+):
     if page < 1 or limit < 1:
-        raise HTTPException(status_code=400, detail="Page ou limit estão com valores inválidos")
-    
-    livros = db.query(LivroDB).offset((page - 1) * limit).limit(limit).all()
-    """
-    db.query(LivroDB)
-        → Busca todos os registros da tabela/modelo LivroDB.
+        raise HTTPException(status_code=400, detail="Page ou limit estão com valores inválidos!") 
 
-    .offset((page - 1) * limit)
-        → Pula uma quantidade de registros com base na página atual.
-        Exemplo:
+    cache_key = f"livros:page={page}&limt={limit}"
+    cached = redis_client.get(cache_key)
 
-        page = 1 → offset = 0 (não pula nada)
-        page = 2 → offset = limit (pula os primeiros registros)
+    if cached:
+        return json.loads(cached)
 
-        .limit(limit)
-            → Limita a quantidade de resultados retornados (ex: 10 por página).
-
-        .all()
-            → Executa a consulta e retorna os resultados em lista.
-    """
+    livros = db.query(LivroDB).offset((page - 1) * limit). limit(limit).all()
 
     if not livros:
-        return {"message": "Nenhum livro cadastrado"}
+        return {"massage": "Não exite livro nenhum!"}
 
-    
     total_livros = db.query(LivroDB).count()
-    # Esse codigo é para contar a quantidade total de livros cadastrados no banco de dados, para que eu possa retornar essa informação na resposta da minha API, 
-    # e também para que eu possa usar essa informação para calcular a quantidade total de páginas disponíveis, caso eu queira implementar uma funcionalidade de paginação mais avançada no futuro.
 
-    return{
+    resposta = {
         "page": page,
         "limit": limit,
-        "total_livros": total_livros,
-        "livros": [{"id": livro.id, "nome_livro": livro.nome_livro, "autor_livro": livro.autor_livro, "ano_livro": livro.ano_livro} for livro in livros]
+        "total": total_livros,
+        "livros": [
+            {
+                "id": livro.id,
+                "nome_livro": livro.nome_livro,
+                "autor_livro": livro.autor_livro,
+                "ano_livro": livro.ano_livro
+            } for livro in livros
+
+        ]
     }
-    # Aqui eu retorno um dicionário com as informações da página, limite, total de livros 
-    # e a lista de livros paginados (com as informações estruturadas em um dicionário para cada livro)
 
+    redis_client.setex(cache_key, 30, json.dumps(resposta))
 
+    return resposta
+
+"""
 async def chamadas_externas_1():
     await asyncio.sleep(2)
     return "Resutado chamada externa 1"
@@ -199,7 +201,7 @@ async def chamadas_externas():
         "mensagem": "Todas as chamadas nas API's foram concluidas com sucesso",
         "resultado": [resultado1, resultado2, resultado3]
     }
-
+"""
     
 @app.post("/adiciona")
 async def post_livros(livro: Livro, db: Session = Depends(sessao_db), credentials: HTTPBasicCredentials = Depends(autenticar_usuario)):
