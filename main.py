@@ -25,6 +25,11 @@ import secrets
 import os
 import redis
 import json
+from fastapi import BackgroundTasks
+from tasks import fatorial, somar
+from celery_app import celery_app
+from celery.result import AsyncResult
+
 
 from sqlalchemy import create_engine, Column, Integer, String
 from sqlalchemy.ext.declarative import declarative_base
@@ -47,7 +52,10 @@ import asyncio
 
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./livros.db") # Aqui é a url do banco de dados
 
-redis_client = redis.Redis(host='127.0.0.1', port=6379, db=0, decode_responses=True) # Config para rodar de forma local
+
+REDIS_HOST = os.getenv("REDIS_HOST", "localhost")
+REDIS_PORT = os.getenv("REDIS_PORT", "6379")
+redis_client = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, db=0, decode_responses=True) # Config para rodar de forma local
 
 engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
 # Cria a conexão com o banco de dados usando a URL informada.
@@ -116,7 +124,43 @@ def autenticar_usuario(credentials: HTTPBasicCredentials = Depends(security)):
             detail="Usuário ou senha incorretos",
             headers={"WWW-Authenticate": "Basic"}
         )
-    
+
+@app.post("/calcular/soma")
+def calcular_soma(a: int, b: int):
+    tarefa = somar.delay(a, b)
+    redis_client.lpush("tarefas_ids", tarefa.id)
+    redis_client.ltrim("tarefas_ids", 0, 49)
+    return {
+        "task_id": tarefa.id,
+        "message": "Tarefa de soma enviada para a execução."
+    }
+
+@app.post("/calcular/fatorial")
+def calcular_fatorial(n: int):
+    tarefa = fatorial.delay(n)
+    redis_client.lpush("tarefas_ids", tarefa.id)
+    redis_client.ltrim("tarefas_ids", 0, 49)
+    return{
+        "task_id": tarefa.id,
+        "message": "Tarefa de fatorial enviada para a execução."
+    }
+
+@app.get("/tarefas/recentes")
+def listar_tarefas_recentes():
+    ids = redis_client.lrange("tarefas_ids", 0, -1)
+    tarefas = []
+
+    for task_id in ids:
+        resultado = AsyncResult(task_id, app=celery_app)
+        tarefas.append({
+            "task_id": task_id,
+            "status": resultado.status,
+            "resultado": resultado.result if resultado.successful() else None
+        })
+
+    return {
+        "tarefas": tarefas
+    }
 
 @app.get("/debug/redis")
 def ver_livros_redis():
