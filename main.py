@@ -29,6 +29,10 @@ from fastapi import BackgroundTasks
 from tasks import fatorial, somar
 from celery_app import celery_app
 from celery.result import AsyncResult
+from dotenv import load_dotenv
+
+load_dotenv()  # Carrega o arquivo .env quando a API roda fora do container.
+# No Docker/Podman Compose as variáveis já vêm do env_file, e o load_dotenv não atrapalha.
 
 
 from sqlalchemy import create_engine, Column, Integer, String
@@ -84,6 +88,13 @@ app = FastAPI(
 # Variáveis de ambiente, ficam no arquivo .env
 MEU_USUARIO = os.getenv("MEU_USUARIO")
 MINHA_SENHA = os.getenv("MINHA_SENHA")
+
+if not MEU_USUARIO or not MINHA_SENHA:
+    raise RuntimeError(
+        "MEU_USUARIO e MINHA_SENHA não foram definidos. "
+        "Crie o arquivo .env na raiz do projeto a partir do .env.example."
+    )
+
 security = HTTPBasic()
 
 class LivroDB(Base):
@@ -185,7 +196,7 @@ def get_livros(
     if page < 1 or limit < 1:
         raise HTTPException(status_code=400, detail="Page ou limit estão com valores inválidos!") 
 
-    cache_key = f"livros:page={page}&limt={limit}"
+    cache_key = f"livros:page={page}&limit={limit}"
     cached = redis_client.get(cache_key)
 
     if cached:
@@ -194,7 +205,7 @@ def get_livros(
     livros = db.query(LivroDB).offset((page - 1) * limit). limit(limit).all()
 
     if not livros:
-        return {"massage": "Não exite livro nenhum!"}
+        return {"message": "Não existe nenhum livro cadastrado!"}
 
     total_livros = db.query(LivroDB).count()
 

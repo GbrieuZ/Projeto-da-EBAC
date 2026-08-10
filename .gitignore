@@ -1,1 +1,21 @@
+# Variáveis de ambiente (o .env.example DEVE ser versionado)
 .env
+
+# Banco de dados local
+*.db
+*.sqlite3
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Celery
+celerybeat-schedule
+*.pid
+
+# Editores / SO
+.vscode/
+.idea/
+.DS_Store
